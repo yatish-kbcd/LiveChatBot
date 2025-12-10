@@ -4,6 +4,7 @@ function App() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isContinuous, setIsContinuous] = useState(false);
   const recognitionRef = useRef(null);
   const synthRef = useRef(null);
 
@@ -14,19 +15,37 @@ function App() {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
+      recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = false;
       recognitionRef.current.lang = 'en-US';
 
       recognitionRef.current.onstart = () => setIsListening(true);
-      recognitionRef.current.onend = () => setIsListening(false);
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+        if (isContinuous) {
+          // Restart listening after a short delay if in continuous mode
+          setTimeout(() => {
+            if (isContinuous && !isSpeaking && !isStreaming) {
+              startListening();
+            }
+          }, 500);
+        }
+      };
       recognitionRef.current.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
+        const transcript = event.results[event.results.length - 1][0].transcript;
         handleSend(transcript);
       };
       recognitionRef.current.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
+        if (isContinuous) {
+          // Try to restart listening after error in continuous mode
+          setTimeout(() => {
+            if (isContinuous && !isSpeaking && !isStreaming) {
+              startListening();
+            }
+          }, 1000);
+        }
       };
     }
 
@@ -84,11 +103,30 @@ function App() {
     }
   };
 
+  const startContinuousConversation = () => {
+    setIsContinuous(true);
+    startListening();
+  };
+
+  const stopContinuousConversation = () => {
+    setIsContinuous(false);
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    stopSpeaking();
+  };
+
   const speakMessage = (text) => {
     if (synthRef.current && text) {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        if (isContinuous && !isStreaming) {
+          // Restart listening after speaking in continuous mode
+          setTimeout(() => startListening(), 300);
+        }
+      };
       synthRef.current.speak(utterance);
     }
   };
@@ -132,26 +170,45 @@ function App() {
             )}
           </div>
 
-          {/* Microphone Button */}
-          <button
-            onClick={startListening}
-            disabled={isStreaming || isListening || isSpeaking}
-            className={`w-32 h-32 rounded-full text-6xl transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-blue-300 ${
-              isListening
-                ? 'bg-red-500 text-white animate-pulse'
-                : isStreaming || isSpeaking
-                ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                : 'bg-blue-500 text-white hover:bg-blue-600 active:scale-95'
-            }`}
-          >
-            🎤
-          </button>
+          {/* Control Buttons */}
+          {!isContinuous ? (
+            <>
+              {/* Start Continuous Conversation Button */}
+              <button
+                onClick={startContinuousConversation}
+                disabled={isStreaming || isListening || isSpeaking}
+                className={`w-32 h-32 rounded-full text-6xl transition-all duration-200 focus:outline-none focus:ring-4 cursor-pointer focus:ring-blue-300 ${
+                  isListening
+                    ? 'bg-red-500 text-white animate-pulse'
+                    : isStreaming || isSpeaking
+                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                    : 'bg-blue-500 text-white hover:bg-blue-600 active:scale-95'
+                }`}
+              >
+                🎤
+              </button>
 
-          <p className="text-gray-600 text-lg">
-            {!isListening && !isStreaming && !isSpeaking
-              ? 'Tap the microphone to start speaking'
-              : 'Please wait...'}
-          </p>
+              <p className="text-gray-600 text-lg">
+                {!isListening && !isStreaming && !isSpeaking
+                  ? 'Tap to start continuous conversation'
+                  : 'Please wait...'}
+              </p>
+            </>
+          ) : (
+            <>
+              {/* Stop Continuous Conversation Button */}
+              <button
+                onClick={stopContinuousConversation}
+                className="px-8 py-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200 focus:outline-none focus:ring-4 focus:ring-red-300 text-xl font-semibold"
+              >
+                Stop Conversation
+              </button>
+
+              <p className="text-gray-600 text-lg">
+                Continuous conversation active - listening for your questions...
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
