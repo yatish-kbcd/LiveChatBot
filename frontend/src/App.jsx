@@ -5,6 +5,7 @@ function App() {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isContinuous, setIsContinuous] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
   const recognitionRef = useRef(null);
   const synthRef = useRef(null);
 
@@ -67,13 +68,19 @@ function App() {
   const handleSend = async (message) => {
     setIsStreaming(true);
 
+    let currentSessionId = sessionId;
+    if (!currentSessionId) {
+      currentSessionId = Date.now().toString();
+      setSessionId(currentSessionId);
+    }
+
     try {
       const response = await fetch('http://localhost:3001/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, sessionId: currentSessionId }),
       });
 
       const reader = response.body.getReader();
@@ -104,6 +111,8 @@ function App() {
   };
 
   const startContinuousConversation = () => {
+    const newSessionId = Date.now().toString();
+    setSessionId(newSessionId);
     setIsContinuous(true);
     startListening();
   };
